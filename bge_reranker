@@ -1,0 +1,34 @@
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+from sentence_transformers.util import cos_sim
+from sentence_transformers import SentenceTransformer
+
+# 加载模型
+model = SentenceTransformer('/root/app/models/models--BAAI--bge-reranker-large')
+
+# 读取数据
+df = pd.read_excel('/root/app/rerank.xlsx')
+questions = [str(q) for q in df['question']]
+ground_truths = [str(gt) for gt in df['ground_truth']]
+
+hit_count = 0
+total_questions = len(questions)
+
+for q, gt in tqdm(zip(questions, ground_truths), total=total_questions, desc='Computing hit probability'):
+    query = q   
+    # 计算嵌入
+    query_embedding = model.encode(query)
+    doc_embeddings = model.encode(ground_truths)
+    
+    # 计算余弦相似度
+    scores = cos_sim(query_embedding, doc_embeddings).squeeze().cpu().numpy()
+    top3_index = np.argsort(scores)[::-1][:3]
+    
+    # 检查 ground_truth 是否在 top3
+    if ground_truths.index(gt) in top3_index:
+        hit_count += 1
+
+average_hit_top3_probability = hit_count / total_questions
+
+print(f'Average hit TOP3 probability: {average_hit_top3_probability:.2%}')
